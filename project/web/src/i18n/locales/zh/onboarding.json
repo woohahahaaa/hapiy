@@ -7,20 +7,21 @@
   "steps": {
     "provider": "连接供应商",
     "models": "选择模型",
-    "progress": "第 {{current}} / 2 步"
+    "progress": "第 {{current}}/2 步"
   },
   "form": {
     "nameLabel": "供应商名称",
     "optional": "（可选）",
-    "namePlaceholder": "DeepSeek 官方",
+    "namePlaceholder": "如 DeepSeek 官方",
+    "nameHostPlaceholder": "如 {{host}}",
     "baseUrlLabel": "Base URL",
-    "baseUrlPlaceholder": "https://api.deepseek.com/v1",
+    "baseUrlPlaceholder": "如 https://api.deepseek.com/v1",
     "presets": "常用：",
     "apiKeyLabel": "API Key",
-    "keyPlaceholder": "sk-…",
+    "keyPlaceholder": "如 4f8a2c…",
     "show": "显示",
     "hide": "隐藏",
-    "keyHint": "填到 /v1 这一级即可，不要带 /chat/completions。Key 只保存在本机。"
+    "keyHint": "填到 /v1 这一级即可，不要带 /chat/completions。Key 不会上传到云端，只保存在本机。"
   },
   "fetch": {
     "errorTitle": "自动获取模型失败",
@@ -34,7 +35,7 @@
     "searchPlaceholder": "搜索模型",
     "empty": "没有匹配的模型",
     "manualHint": "回车或逗号添加，模型名要和控制台上游的写法完全一致。",
-    "manualPlaceholder": "deepseek-chat",
+    "manualPlaceholder": "如 deepseek-chat",
     "remove": "移除 {{model}}"
   },
   "actions": {
@@ -61,6 +62,6 @@
     "unexpected": "出错了，请重试",
     "createFailed": "创建供应商失败"
   },
-  "footer": "Key 只保存在本机的 hapiy 配置里，不会上传到任何第三方。",
+  "footer": "Key 不会上传到云端，只保存在本机的 hapiy 配置里。",
   "unnamedProvider": "未命名供应商"
 }

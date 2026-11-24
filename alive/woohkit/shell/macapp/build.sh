@@ -9,6 +9,9 @@
 #   SHELL_THEME       主题色 #rrggbb，默认 #0a0202
 #   SHELL_BUNDLE_ID   bundle id，默认 dev.<APP_ID>.app
 #   SHELL_ICON        图标源 png，默认 <web|public>/public/icon-512.png
+#   SHELL_LOGO_FONT_NAME  状态页 logo 字体名，默认 Cookie
+#   SHELL_LOGO_FONT_FILE  状态页 logo 字体文件（woff2/woff/ttf/otf）。给了就
+#                     内嵌进壳（data URI），目标机器没装这个字体也长一样
 #
 # 桌面壳外观（毛玻璃背景 / 无边框顶部 / 预设地址）不看 project.sh，看项目
 # alive/woohkit.json 的 shell 块（都可选，默认都 true / 空）：
@@ -52,6 +55,33 @@ command -v swiftc >/dev/null 2>&1 || {
   exit 1
 }
 
+# 状态页（后端没起来）的 logo 字体：把字体文件内嵌成 data URI，装没装这个
+# 字体的机器上长得一样。没给文件、文件不在、后缀不认，都只是警告：状态页
+# 退回系统字体，不影响构建。
+LOGO_FONT_NAME="${SHELL_LOGO_FONT_NAME:-Cookie}"
+LOGO_FONT_NAME_ESC=$(printf '%s' "$LOGO_FONT_NAME" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+LOGO_FONT_FORMAT=""
+LOGO_FONT_DATA=""
+FONT_FILE="${SHELL_LOGO_FONT_FILE:-}"
+if [ -n "$FONT_FILE" ]; then
+  case "${FONT_FILE##*.}" in
+    woff2) LOGO_FONT_FORMAT=woff2 ;;
+    woff)  LOGO_FONT_FORMAT=woff ;;
+    ttf)   LOGO_FONT_FORMAT=truetype ;;
+    otf)   LOGO_FONT_FORMAT=opentype ;;
+    *)     echo "[macapp] warn: unknown logo font type '$FONT_FILE' — status page falls back to the system font" >&2 ;;
+  esac
+  if [ -n "$LOGO_FONT_FORMAT" ]; then
+    if [ -f "$FONT_FILE" ]; then
+      LOGO_FONT_DATA=$(base64 < "$FONT_FILE" | tr -d '\n')
+      echo "[macapp] embedding logo font $FONT_FILE ($LOGO_FONT_FORMAT)"
+    else
+      echo "[macapp] warn: logo font '$FONT_FILE' not found — status page falls back to the system font" >&2
+      LOGO_FONT_FORMAT=""
+    fi
+  fi
+fi
+
 # #rrggbb -> 三个十进制分量（0x 十六进制在 POSIX 算术里是标准写法）。
 hex="${THEME#\#}"
 R=$((0x$(printf '%s' "$hex" | cut -c1-2)))
@@ -73,6 +103,9 @@ let kThemeBlue = $B
 let kGlass = $GLASS
 let kFrameless = $FRAMELESS
 let kAppUrl = "$APP_URL_ESC"
+let kLogoFontName = "$LOGO_FONT_NAME_ESC"
+let kLogoFontFormat = "$LOGO_FONT_FORMAT"
+let kLogoFontData = "$LOGO_FONT_DATA"
 EOF
 cp "$KIT_DIR/shell/macapp/Shell.swift" "$WORK/main.swift"
 

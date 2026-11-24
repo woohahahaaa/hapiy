@@ -121,6 +121,62 @@ func TestServeEnv(t *testing.T) {
 	}
 }
 
+// TestServeEnvFillsStateLayout is the regression test for the desktop shell's
+// crash loop. The macOS/Windows shells run `hapiy up` with nothing but
+// HAPIY_PORT, and the supervised serve then resolved its database (and the
+// encryption key next to it) against the caller's cwd — the macOS app's is "/",
+// where nothing can be written. serve exited on startup, the supervisor
+// restarted it every second, and the window sat on "服务未启动 / 重启失败" with
+// no way to tell why. The layout now follows the state dir unless the caller
+// set it.
+func TestServeEnvFillsStateLayout(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("HAPIY_STATE_DIR", state)
+	t.Setenv("HAPIY_PORT", "18009")
+	t.Setenv("HAPIY_DB_PATH", "")
+	t.Setenv("HAPIY_LOG_DIR", "")
+	t.Setenv("HAPIY_WEB_DIST", "")
+
+	env := serveEnv()
+	for _, tc := range []struct{ key, want string }{
+		{"HAPIY_STATE_DIR", state},
+		{"HAPIY_DB_PATH", filepath.Join(state, "hapiy.db")},
+		{"HAPIY_LOG_DIR", filepath.Join(state, "logs")},
+	} {
+		if got := lastEnvValue(env, tc.key); got != tc.want {
+			t.Fatalf("%s = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+
+	// A layout the caller set wins (alive.sh and the dev sidecar pass their own).
+	t.Setenv("HAPIY_DB_PATH", "/custom/live.db")
+	if got := lastEnvValue(serveEnv(), "HAPIY_DB_PATH"); got != "/custom/live.db" {
+		t.Fatalf("HAPIY_DB_PATH = %q, want the caller's /custom/live.db", got)
+	}
+}
+
+// TestStateLayoutEnvWebDist keeps HAPIY_WEB_DIST tied to a webdist that really
+// sits next to the binary, so the console is served from the install location
+// and an API-only install stays API-only.
+func TestStateLayoutEnvWebDist(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("HAPIY_STATE_DIR", state)
+
+	appDir := t.TempDir()
+	exe := filepath.Join(appDir, "hapiy")
+	if got := envPair(stateLayoutEnv(exe), "HAPIY_WEB_DIST"); got != "" {
+		t.Fatalf("HAPIY_WEB_DIST = %q with no webdist, want none", got)
+	}
+
+	webDist := filepath.Join(appDir, "webdist")
+	if err := os.Mkdir(webDist, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := envPair(stateLayoutEnv(exe), "HAPIY_WEB_DIST"); got != webDist {
+		t.Fatalf("HAPIY_WEB_DIST = %q, want %q", got, webDist)
+	}
+}
+
 // lastEnvValue reads the value os/exec would pick: duplicate keys keep the last.
 func lastEnvValue(env []string, key string) string {
 	value := ""
@@ -130,4 +186,14 @@ func lastEnvValue(env []string, key string) string {
 		}
 	}
 	return value
+}
+
+// envPair reads one value out of the [][2]string form the service units use.
+func envPair(pairs [][2]string, key string) string {
+	for _, kv := range pairs {
+		if kv[0] == key {
+			return kv[1]
+		}
+	}
+	return ""
 }

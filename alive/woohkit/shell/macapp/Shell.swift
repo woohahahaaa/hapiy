@@ -371,6 +371,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKUIDele
 
     private func fallbackHTML(title: String, status: String, spinner: Bool) -> String {
         let spinnerClass = spinner ? "spinner" : "spinner hidden"
+        // logo 字体是构建时内嵌的（build.sh 的 SHELL_LOGO_FONT_*）：状态页出现
+        // 时本机服务连不上，取不到控制台那份字体，只有嵌进来才不会退化成
+        // 系统手写体。没嵌（kLogoFontData 为空）就只留字体名，谁装了谁生效。
+        let logoFontFace = kLogoFontData.isEmpty ? "" : "@font-face { font-family: \"\(kLogoFontName)\"; src: url(data:font/\(kLogoFontFormat);base64,\(kLogoFontData)) format(\"\(kLogoFontFormat)\"); font-display: block; }"
         return """
         <!doctype html>
         <html lang="zh-CN">
@@ -380,6 +384,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKUIDele
         <style>
           :root { color-scheme: dark; }
           * { box-sizing: border-box; }
+          \(logoFontFace)
           html, body { height: 100%; }
           body {
             margin: 0;
@@ -391,7 +396,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKUIDele
             justify-content: center;
           }
           .card { width: min(360px, calc(100vw - 48px)); text-align: center; }
-          .logo { font-family: "Cookie", "Snell Roundhand", cursive; font-size: 40px; line-height: 1; }
+          .logo { font-family: "\(kLogoFontName)", "Snell Roundhand", cursive; font-size: 40px; line-height: 1; }
           .spinner {
             width: 20px; height: 20px; margin: 24px auto 0;
             border: 2px solid rgba(255,255,255,.16);

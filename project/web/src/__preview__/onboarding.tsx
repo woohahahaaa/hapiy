@@ -170,7 +170,7 @@ function ProviderStep({
           id="provider-name"
           value={name}
           onChange={(event) => onName(event.target.value)}
-          placeholder={baseUrl ? hostOf(baseUrl) : 'DeepSeek 官方'}
+          placeholder={baseUrl ? `如 ${hostOf(baseUrl)}` : '如 DeepSeek 官方'}
           className="h-10 text-sm"
           autoComplete="off"
         />
@@ -184,7 +184,7 @@ function ProviderStep({
           id="provider-base-url"
           value={baseUrl}
           onChange={(event) => onBaseUrl(event.target.value)}
-          placeholder="https://api.deepseek.com/v1"
+          placeholder="如 https://api.deepseek.com/v1"
           className="h-10 font-mono text-sm"
           spellCheck={false}
           autoComplete="off"
@@ -217,22 +217,24 @@ function ProviderStep({
             onKeyDown={(event) => {
               if (event.key === 'Enter') void runFetch()
             }}
-            placeholder="sk-…"
-            className="h-10 pr-16 font-mono text-sm"
+            placeholder="如 4f8a2c…"
+            className="h-10 pr-10 font-mono text-sm"
             spellCheck={false}
             autoComplete="off"
           />
           <button
             type="button"
             onClick={() => setShowKey((current) => !current)}
-            className="absolute inset-y-0 right-2 my-auto h-6 rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={showKey ? '隐藏' : '显示'}
+            aria-label={showKey ? '隐藏' : '显示'}
+            className="absolute inset-y-0 right-2 my-auto grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            {showKey ? '隐藏' : '显示'}
+            <AppIcon name={showKey ? 'visibility_off' : 'visibility'} size={16} />
           </button>
         </div>
         <p className="text-[11px] leading-5 text-muted-foreground">
           填到 <code className="rounded bg-muted px-1 py-0.5 font-mono">/v1</code> 这一级即可，不要带
-          <code className="rounded bg-muted px-1 py-0.5 font-mono">/chat/completions</code>。Key 只保存在本机。
+          <code className="rounded bg-muted px-1 py-0.5 font-mono">/chat/completions</code>。Key 不会上传到云端，只保存在本机。
         </p>
       </div>
 
@@ -410,7 +412,7 @@ function ModelStep({
                   addDraft()
                 }
               }}
-              placeholder="deepseek-chat"
+              placeholder="如 deepseek-chat"
               className="h-9 font-mono text-xs"
               autoComplete="off"
             />
@@ -668,7 +670,7 @@ function OnboardingPreview() {
           <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <StepDots step={step} />
-              {step < 3 && <span className="text-[11px] text-muted-foreground">第 {step} / 2 步</span>}
+              {step < 3 && <span className="text-[11px] text-muted-foreground">第 {step}/2 步</span>}
             </div>
             <div className="px-6 py-6">
               {step === 1 && (
@@ -712,7 +714,7 @@ function OnboardingPreview() {
           </div>
 
           <p className="mt-4 text-center text-[11px] text-muted-foreground">
-            Key 只保存在本机的 hapiy 配置里，不会上传到任何第三方。
+            Key 不会上传到云端，只保存在本机的 hapiy 配置里。
           </p>
         </div>
       </main>

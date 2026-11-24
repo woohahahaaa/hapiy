@@ -77,6 +77,8 @@
   "palette": "background-color",
   "fullscreen": "full-screen",
   "translate": "translate",
-  "search": "search"
+  "search": "search",
+  "visibility": "preview-open",
+  "visibility_off": "preview-close-one"
  }
 }

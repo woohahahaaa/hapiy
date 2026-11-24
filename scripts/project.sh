@@ -128,6 +128,13 @@ INSTALL_HEALTH_PATH="/"
 SHELL_THEME="#1e2b21"
 SHELL_ICON="$ROOT_DIR/project/web/public/icon-512.png"
 
+# 「服务未启动」状态页的 logo 字体：随壳内嵌，目标机器上没装这个字体也长
+# 一样（状态页出现时本机服务是连不上的，没法从控制台取字体）。字体文件走
+# web 装好的 @fontsource，和网页 logo 是同一个文件；发布时先 pnpm build，
+# 一定有。
+SHELL_LOGO_FONT_NAME="Cookie"
+SHELL_LOGO_FONT_FILE="$WEB_DIR/node_modules/@fontsource/cookie/files/cookie-latin-400-normal.woff2"
+
 proj_version() {
   grep -o 'Version = "[^"]*"' "$ROOT_DIR/project/backend/internal/version/version.go" | head -1 | sed 's/Version = "//;s/"//'
 }

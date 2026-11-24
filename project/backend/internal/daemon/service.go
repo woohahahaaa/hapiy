@@ -105,22 +105,16 @@ func serviceExecutable() (string, error) {
 }
 
 // serviceExtraEnv is the environment the installed backend runs with, rooted in
-// the install location (~/.hapiy) rather than the launcher's cwd. HAPIY_WEB_DIST
-// is only added when a webdist actually sits next to the binary.
+// the install location (~/.hapiy) rather than the launcher's cwd. The layout is
+// shared with the local supervisor (stateLayoutEnv) so both ways of running the
+// backend agree; only the mode and port are the service's own.
 func serviceExtraEnv() [][2]string {
 	exe, _ := serviceExecutable()
-	appDir := filepath.Dir(exe)
 	pairs := [][2]string{
 		{"HAPIY_ENV", "production"},
 		{"HAPIY_PORT", port()},
-		{"HAPIY_STATE_DIR", stateDir()},
-		{"HAPIY_DB_PATH", filepath.Join(stateDir(), "hapiy.db")},
-		{"HAPIY_LOG_DIR", filepath.Join(stateDir(), "logs")},
 	}
-	if info, err := os.Stat(filepath.Join(appDir, "webdist")); err == nil && info.IsDir() {
-		pairs = append(pairs, [2]string{"HAPIY_WEB_DIST", filepath.Join(appDir, "webdist")})
-	}
-	return pairs
+	return append(pairs, stateLayoutEnv(exe)...)
 }
 
 // printServiceBackend prints backend health and log path; shared by the three

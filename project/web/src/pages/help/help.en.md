@@ -17,7 +17,7 @@ A request's full journey: the client calls hapiy with `Authorization: Bearer hk-
 
 hapiy is mainly about solving the problems agents hit while calling models: slow upstreams, rate limits, upstream errors, client bugs, and costs that are hard to estimate. There's a lot here, so hapiy is not a zero-learning-cost product—run through the typical scenarios below first and the rest gets easier.
 
-If you would rather skip the learning curve, the built-in assistant in the bottom-right corner can do the configuration for you: chat mode only answers questions, while execute mode can create, edit, enable or disable things (writes go through the real UI, just as if you clicked).
+If you prefer not to study every setting, the built-in assistant in the bottom-right corner can handle the configuration for you: chat mode only answers questions, while execute mode can create, edit, enable or disable things (writes go through the real UI, matching manual changes).
 
 ## Typical scenarios
 

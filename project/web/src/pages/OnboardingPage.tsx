@@ -185,7 +185,9 @@ function ProviderStep({
           onChange={(event) => onName(event.target.value)}
           placeholder={
             baseUrl
-              ? hostOf(baseUrl, t('unnamedProvider'))
+              ? t('form.nameHostPlaceholder', {
+                  host: hostOf(baseUrl, t('unnamedProvider')),
+                })
               : t('form.namePlaceholder')
           }
           className="h-10 text-sm"
@@ -241,16 +243,18 @@ function ProviderStep({
               if (event.key === 'Enter') onFetch()
             }}
             placeholder={t('form.keyPlaceholder')}
-            className="h-10 pr-16 font-mono text-sm"
+            className="h-10 pr-10 font-mono text-sm"
             spellCheck={false}
             autoComplete="off"
           />
           <button
             type="button"
             onClick={() => setShowKey((current) => !current)}
-            className="absolute inset-y-0 right-2 my-auto h-6 rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={showKey ? t('form.hide') : t('form.show')}
+            aria-label={showKey ? t('form.hide') : t('form.show')}
+            className="absolute inset-y-0 right-2 my-auto grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            {showKey ? t('form.hide') : t('form.show')}
+            <AppIcon name={showKey ? 'visibility_off' : 'visibility'} size={16} />
           </button>
         </div>
         <p className="text-[11px] leading-5 text-muted-foreground">

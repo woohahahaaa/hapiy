@@ -7,20 +7,21 @@
   "steps": {
     "provider": "Connect provider",
     "models": "Choose models",
-    "progress": "Step {{current}} of 2"
+    "progress": "Step {{current}}/2"
   },
   "form": {
     "nameLabel": "Provider name",
     "optional": "(optional)",
-    "namePlaceholder": "DeepSeek official",
+    "namePlaceholder": "e.g. DeepSeek official",
+    "nameHostPlaceholder": "e.g. {{host}}",
     "baseUrlLabel": "Base URL",
-    "baseUrlPlaceholder": "https://api.deepseek.com/v1",
+    "baseUrlPlaceholder": "e.g. https://api.deepseek.com/v1",
     "presets": "Common:",
     "apiKeyLabel": "API Key",
-    "keyPlaceholder": "sk-…",
+    "keyPlaceholder": "e.g. 4f8a2c…",
     "show": "Show",
     "hide": "Hide",
-    "keyHint": "Use the /v1 level here, not /chat/completions. The key is stored only on this machine."
+    "keyHint": "Use the /v1 level here, not /chat/completions. The key is never uploaded to the cloud — it stays on this machine."
   },
   "fetch": {
     "errorTitle": "Could not fetch models automatically",
@@ -34,7 +35,7 @@
     "searchPlaceholder": "Search models",
     "empty": "No matching models",
     "manualHint": "Press Enter or comma to add. Model names must match the upstream console exactly.",
-    "manualPlaceholder": "deepseek-chat",
+    "manualPlaceholder": "e.g. deepseek-chat",
     "remove": "Remove {{model}}"
   },
   "actions": {
@@ -61,6 +62,6 @@
     "unexpected": "Something went wrong. Try again.",
     "createFailed": "Could not create the provider"
   },
-  "footer": "The key is stored only in hapiy's local configuration and is never uploaded to any third party.",
+  "footer": "The key is never uploaded to the cloud — it stays in hapiy's local configuration.",
   "unnamedProvider": "Unnamed provider"
 }

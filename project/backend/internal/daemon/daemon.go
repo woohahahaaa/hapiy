@@ -106,8 +106,44 @@ func RecordServePort(env, p string) {
 // hand-run `hapiy up`) binds 8080 while the port file still says 18009, and
 // every later probe chases the wrong port. Duplicate keys are fine: os/exec
 // keeps the last value, which is the one appended here.
+//
+// The state layout is filled in for whatever the caller left unset. That is
+// what keeps the local supervisor on par with the autostart service: the app
+// shells run `hapiy up` with nothing but HAPIY_PORT, and without these a bare
+// `serve` falls back to cwd-relative defaults ("./hapiy.db"). The macOS app's
+// working directory is "/", where nothing can be written, so serve died on
+// every restart writing encryption.key next to that phantom database — the
+// "服务未启动 / 重启失败" screen, forever.
 func serveEnv() []string {
-	return append(os.Environ(), "HAPIY_PORT="+port())
+	exe, _ := os.Executable()
+	env := append(os.Environ(), "HAPIY_PORT="+port())
+	for _, kv := range stateLayoutEnv(exe) {
+		if os.Getenv(kv[0]) == "" {
+			env = append(env, kv[0]+"="+kv[1])
+		}
+	}
+	return env
+}
+
+// stateLayoutEnv is the state-dir layout a backend needs: where the database,
+// key, logs and built frontend live. The autostart service pins all of them in
+// its unit; the local supervisor must pass the same set or the child resolves
+// them against its cwd. HAPIY_WEB_DIST is only returned when a webdist actually
+// sits next to the binary.
+func stateLayoutEnv(exe string) [][2]string {
+	pairs := [][2]string{
+		{"HAPIY_STATE_DIR", stateDir()},
+		{"HAPIY_DB_PATH", filepath.Join(stateDir(), "hapiy.db")},
+		{"HAPIY_LOG_DIR", filepath.Join(stateDir(), "logs")},
+	}
+	if exe == "" {
+		return pairs
+	}
+	webDist := filepath.Join(filepath.Dir(exe), "webdist")
+	if info, err := os.Stat(webDist); err == nil && info.IsDir() {
+		pairs = append(pairs, [2]string{"HAPIY_WEB_DIST", webDist})
+	}
+	return pairs
 }
 
 func healthURL() string { return "http://127.0.0.1:" + port() + "/health" }
